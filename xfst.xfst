@@ -1,0 +1,81 @@
+clear stack
+
+! Read lexicon and make a finite-state network of it
+read lexc lexc.lexc
+define Lexicon ;
+regex Lexicon ;
+
+! define Consonants, Vowels, Glides, Liquids, Nasals, Fricatives, Obstruents, Alveolar and Bilabial sounds:
+define C [ j | w | r | l | n | m | ŋ | p | b | t | d | k | g | ɡ | f | v | s | z | θ | ð | ʃ | ʒ | h | ч | ж | c | x | q | j ] ;
+define V [ ɪ | e | ɛ | æ | ʌ | a | ʊ | ɒ | ə | i | ɑ | ɔ | ɜ | u | o | y | e | ː ] ; ! notice the vowel length mark as a vowel :)
+define G [ j | w ] ;
+define L [ r | l ] ;
+define N [ n | m | ŋ ] ;
+define F [ f | v | s | z | θ | ð | ʃ | ʒ | h | ч | ж ] ;
+define S [ p | b | t | d | k | g | ɡ | c | x | q ] ;
+define ALV [ t | d | n | θ | ð | l ] ;
+define BIL [ p | b | w ] ;
+define T [ t ] ; ! stops!
+define O [ s ] ; ! continuants!
+
+! First, we need to preprocess our transcription / spelling
+! Rule 0. Get rid of brackets and stress marks in the input:
+define noacc [ %/ | ˈ | ˌ | %. ] -> 0 ;
+
+! Rule 0.33. Make intermediate forms of /tʃ/ and /dʒ/ as they need to be treated as a single consonant
+define affrmod t ʃ -> ч .o.
+               d ʒ -> ж ;
+
+! Rule 1. If the word ends in a consonant - insert syllable boundary “|” before it:
+define lastC [. .] -> %| || _ C .#. ;
+
+! Rule 2. If the word starts with /s/ + consonant - insert | between them:
+define begsC [. .] -> %| || .#. s _ C ;
+
+! Rule 3. VVsCV should be syllabified as VV|sC, but VscV as Vs|CV (so that there are no superheavy syllables):
+define noSH [. .] -> %| || V V _ s C V ;
+
+! Rule 4. Onset maximisation principle - if we have an intervocalic consonant - it goes to the onset of the second syllable:
+define OMPVCV [. .] -> %| || V _ C V ;
+
+! Rule 5. Homoorganicity constraint. In order to avoid incorrect syllabification of words like /kætnɪp/ as /kæ|tnɪp/ 
+! (tn is rising sonority, so it will be in the onset according to rules 6.x), while it should be /kæt|nɪp/ due to homoorganicity constraint:
+define nohomo [. .] -> %| || ALV _ ALV V .o.
+              [. .] -> %| || BIL _ BIL V ; ! no V before? 
+
+
+! Rule 6. The hard part. We look at two consonants before the sonority peak (Vowel), if the first Consonant is more sonorous than the second one, 
+! like /sæntə/ - we put the syllable boundary between them:
+define OMPVCCV [. .] -> %| || V C* [ G | L | N | F | S ] _ S V .o.
+	       [. .] -> %| || V C* [ G | L | N | F | S ] _ F V .o. 
+	       [. .] -> %| || V C* [ G | L | N | S ] _ N V .o.
+	       [. .] -> %| || V C* [ G | L | N ] _ L V .o.
+	       [. .] -> %| || V C* N _ w V .o.
+	       [. .] -> %| || V C* _ N j V .o.
+	       [. .] -> %| || V C* G _ G V ;
+
+! Rule 7. The same thing but a one consonant farther in the onset,    kɒntrə -> kɒn|trə
+define OMPVCCCV [. .] -> %| || V C* [ G | L | N | F | S ] _ S C V .o.
+		[. .] -> %| || V C* [ G | L | N | F | S] _ F C V .o.
+		[. .] -> %| || V C* [ G | L | N | S ] _ N C V .o.	  
+		[. .] -> %| || V C* [ G | L | N ] _ L C V .o.  
+		[. .] -> %| || V C* G _ G C V ; 
+
+! Rule 8. Puts syllable boundary before two consonants with rising sonority before a vowel:
+define VrisingCCV [. .] -> %| || V _ S [ G | L ] V .o. ! stops are really restricted
+		  [. .] -> %| || V _ F [ G | L | N ] V .o.
+		  [. .] -> %| || V _ L G V ;
+
+! Rule 9. Put affricates back
+define affrback ч -> t ʃ .o.
+		ж -> d ʒ ;
+
+
+regex Lexicon .o. noacc .o. affrmod .o. lastC .o. begsC .o. noSH .o. OMPVCV .o. nohomo .o. OMPVCCV .o. OMPVCCCV .o. VrisingCCV .o. affrback;
+
+! Just for testing. Delete exclamation marks to run tests.
+!down compromise - ˈkɒm.prə.maɪz
+!down struggle - /ˈstrʌɡ.əl/
+!down procrastination - /prəˌkræs.tɪˈneɪ.ʃən/
+!down apne - /ˈæp.ni.ə/
+!down ankle - /ˈæŋ.kəl/
